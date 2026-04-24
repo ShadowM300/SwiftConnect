@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftConnect — Login</title>
+    <meta name="description" content="Login to SwiftConnect - Fast, secure messaging">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <div class="logo-icon">⚡</div>
+                <h1>SwiftConnect</h1>
+                <p>Fast, secure messaging</p>
+            </div>
+
+            <div class="error-msg" id="errorMsg"></div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
+            </form>
+
+            <div class="auth-footer">
+                Don't have an account? <a href="/register/">Create one</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        // Redirect if already logged in
+        if (localStorage.getItem('access_token')) {
+            window.location.href = '/chat/';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.style.display = 'none';
+            btn.textContent = 'Signing in...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/accounts/login/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('username').value,
+                        password: document.getElementById('password').value,
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('access_token', data.access);
+                    localStorage.setItem('refresh_token', data.refresh);
+                    window.location.href = '/chat/';
+                } else {
+                    errorMsg.textContent = data.detail || 'Invalid username or password';
+                    errorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                errorMsg.textContent = 'Network error. Please try again.';
+                errorMsg.style.display = 'block';
+            }
+
+            btn.textContent = 'Sign In';
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>

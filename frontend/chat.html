@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftConnect</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- LEFT SIDEBAR -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="user-avatar" id="myAvatar" onclick="toggleProfileModal()">U</div>
+                <div style="font-size:17px;font-weight:600;">Chats</div>
+                <div class="sidebar-actions">
+                    <button class="icon-btn" onclick="toggleStatusView()" title="Status">⭕</button>
+                    <button class="icon-btn" onclick="toggleNotifications()" title="Notifications" style="position: relative;">
+                        🔔
+                        <span id="notifBadge" style="display:none; position:absolute; top:2px; right:2px; background:var(--wa-danger); color:white; font-size:10px; border-radius:50%; width:14px; height:14px; align-items:center; justify-content:center;"></span>
+                    </button>
+                    <button class="icon-btn" onclick="openGroupModal()" title="New Group">👥</button>
+                    <button class="icon-btn" onclick="logout()" title="Logout">🚪</button>
+                </div>
+            </div>
+
+            <div class="search-container" style="position:relative;">
+                <div class="search-box">
+                    <span>🔍</span>
+                    <input type="text" id="searchInput" placeholder="Search by name or number" oninput="handleSearch(this.value)">
+                </div>
+                <div class="search-results" id="searchResults"></div>
+            </div>
+
+            <div class="sidebar-sections">
+                <div class="sidebar-section-btn" onclick="toggleArchivedView()" id="archivedBtn">
+                    <span>📁</span> Archived Chats
+                </div>
+                <div class="sidebar-section-btn" onclick="promptLockPin()" id="lockedBtn">
+                    <span>🔒</span> Locked Chats
+                </div>
+            </div>
+
+            <div class="conversation-list" id="conversationList"></div>
+
+            <!-- PROFILE PANEL -->
+            <div class="profile-panel" id="profilePanel">
+                <div class="profile-header">
+                    <button class="icon-btn" onclick="closeProfileModal()" title="Back">←</button>
+                    <h2>Profile</h2>
+                </div>
+                <div class="profile-content">
+                    <div class="profile-avatar-container" onclick="document.getElementById('profileAvatarInput').click()">
+                        <div class="user-avatar" id="profileAvatarDisplay" style="width:200px; height:200px; font-size:60px; margin: 0 auto;">U</div>
+                        <div class="avatar-overlay">
+                            <span style="font-size: 24px;">📷</span>
+                            <span style="font-size: 11px; margin-top: 8px; font-weight: 500;">CHANGE<br>PROFILE PHOTO</span>
+                        </div>
+                        <input type="file" id="profileAvatarInput" style="display:none" accept="image/*" onchange="updateProfileAvatar(event)">
+                    </div>
+                    <div style="background: var(--wa-sidebar-bg); text-align:center; padding-bottom:20px;">
+                        <button onclick="removeProfileAvatar()" style="background:none;border:none;color:#ff4a4a;cursor:pointer;font-size:14px;font-weight:500;">Remove Photo</button>
+                    </div>
+
+                    <div class="profile-section">
+                        <label class="profile-label">Your name</label>
+                        <div class="profile-input-group">
+                            <input type="text" id="profileUsername" class="profile-input" onblur="saveProfileField('username')" onkeydown="if(event.key==='Enter') this.blur()">
+                            <span class="edit-icon" style="color: var(--wa-text-secondary);">✏️</span>
+                        </div>
+                    </div>
+                    <div class="profile-disclaimer">
+                        This is not your username or pin. This name will be visible to your SwiftConnect contacts.
+                    </div>
+
+                    <div class="profile-section">
+                        <label class="profile-label">About</label>
+                        <div class="profile-input-group">
+                            <input type="text" id="profileAbout" class="profile-input" onblur="saveProfileField('about')" onkeydown="if(event.key==='Enter') this.blur()">
+                            <span class="edit-icon" style="color: var(--wa-text-secondary);">✏️</span>
+                        </div>
+                    </div>
+                    
+                    <div class="profile-section">
+                        <label class="profile-label">Phone Number</label>
+                        <div class="profile-input-group">
+                            <input type="text" id="profilePhone" class="profile-input" disabled style="opacity:0.7">
+                        </div>
+                    </div>
+
+                    <div class="profile-section" style="margin-bottom: 30px;">
+                        <label class="profile-label">Chat Lock PIN</label>
+                        <div class="profile-input-group">
+                            <input type="password" id="profilePin" maxlength="4" class="profile-input" placeholder="Enter 4-digit PIN" onblur="saveProfileField('chat_lock_pin')" onkeydown="if(event.key==='Enter') this.blur()">
+                            <span class="edit-icon" style="color: var(--wa-text-secondary);">✏️</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT CHAT PANEL -->
+        <div class="chat-panel" id="chatPanel">
+            <div class="empty-chat" id="emptyChat">
+                <div class="empty-icon">⚡</div>
+                <h2>SwiftConnect</h2>
+                <p>Send and receive messages. Start a conversation by searching for friends using their username or phone number.</p>
+            </div>
+
+            <div id="activeChatView" style="display:none;flex-direction:column;height:100%;">
+                <div class="chat-header" id="chatHeader">
+                    <div class="conv-avatar" id="chatAvatar" onclick="openChatInfo()">U</div>
+                    <div class="chat-header-info">
+                        <div class="name" id="chatName">User</div>
+                        <div class="status" id="chatStatus">offline</div>
+                    </div>
+                    <div class="chat-header-actions" style="position:relative;">
+                        <button class="icon-btn" onclick="startCall('voice')" title="Voice Call">📞</button>
+                        <button class="icon-btn" onclick="startCall('video')" title="Video Call">📹</button>
+                        <button class="icon-btn" onclick="toggleChatSettingsMenu()" title="Settings">⋮</button>
+                        <div class="dropdown-menu" id="chatSettingsMenu" style="display:none; position:absolute; right:0; top:40px; background:var(--wa-bg-panel); border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.3); z-index:100; min-width:150px; overflow:hidden;">
+                            <div class="dropdown-item" onclick="toggleSetting('is_muted')" id="menuMute">Mute</div>
+                            <div class="dropdown-item" onclick="toggleSetting('is_archived')" id="menuArchive">Archive</div>
+                            <div class="dropdown-item" onclick="toggleSetting('is_locked')" id="menuLock">Lock Chat</div>
+                            <div class="dropdown-item" onclick="toggleSetting('is_blocked')" id="menuBlock" style="color:#ff4a4a;">Block</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="messages-area" id="messagesArea"></div>
+
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <span id="typingText" style="font-size:13px;color:var(--wa-text-secondary);margin-left:4px;">typing...</span>
+                </div>
+
+                <div class="reply-bar" id="replyBar">
+                    <div class="reply-name" id="replyName"></div>
+                    <div class="reply-text" id="replyText"></div>
+                    <button class="reply-close" onclick="cancelReply()">✕</button>
+                </div>
+
+                <div class="file-preview-bar" id="filePreview">
+                    <span>📎</span>
+                    <span class="preview-name" id="previewFileName"></span>
+                    <button class="preview-remove" onclick="cancelFile()">✕</button>
+                </div>
+
+                <div class="message-input-area" id="messageInputArea">
+                    <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Attach">📎</button>
+                    <input type="file" id="fileInput" style="display:none" onchange="handleFileSelect(event)" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.txt">
+                    <div class="input-wrapper">
+                        <textarea id="messageInput" placeholder="Type a message" rows="1" oninput="autoResize(this);sendTyping();" onkeydown="handleKeyDown(event)"></textarea>
+                    </div>
+                    <button class="send-btn" onclick="sendMessage()" id="sendBtn">➤</button>
+                </div>
+                
+                <div class="blocked-message-area" id="blockedMessageArea" style="display:none; padding:15px; text-align:center; background:var(--wa-bg-panel); color:var(--wa-text-secondary);">
+                    You blocked this chat. You cannot send or receive messages.
+                    <button onclick="toggleSetting('is_blocked')" style="background:none;border:none;color:var(--wa-teal);cursor:pointer;text-decoration:underline;">Unblock</button>
+                </div>
+            </div>
+
+            <!-- CONTACT INFO PANEL (Slides from right) -->
+            <div class="contact-info-panel" id="contactInfoPanel">
+                <div class="contact-info-header">
+                    <button class="icon-btn" onclick="closeContactInfo()" style="color:white;">✕</button>
+                    <h2>Contact info</h2>
+                </div>
+                <div class="contact-info-content">
+                    <div class="contact-info-hero">
+                        <div class="user-avatar" id="contactInfoAvatar" style="width:200px; height:200px; font-size:60px; margin: 0 auto; margin-bottom: 20px;"></div>
+                        <h2 id="contactInfoName" style="font-size: 24px; font-weight: 400; margin-bottom: 5px;"></h2>
+                        <div id="contactInfoPhone" style="color: var(--wa-text-secondary); font-size: 16px;"></div>
+                    </div>
+                    <div class="contact-info-section">
+                        <label class="contact-info-label">About</label>
+                        <div id="contactInfoAbout" style="font-size: 16px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATIONS DROPDOWN -->
+    <div id="notifDropdown" class="settings-dropdown" style="display:none; right: auto; left: 360px; top: 60px; width: 300px; max-height: 400px; overflow-y: auto; z-index: 100;">
+        <div style="padding: 10px 15px; border-bottom: 1px solid var(--wa-border); font-weight: 500;">Notifications</div>
+        <div id="notifList"></div>
+    </div>
+
+    <!-- STATUS VIEW MODAL (Immersive) -->
+    <div class="status-view-container" id="statusViewContainer" style="display:none;">
+        <button class="status-close-btn" onclick="closeStatusView()">✕</button>
+        
+        <div class="status-sidebar">
+            <div class="status-sidebar-header">
+                <div class="user-avatar" id="statusMyAvatar" style="width: 40px; height: 40px; margin-right: 12px; font-size: 16px;"></div>
+                <div>
+                    <div style="font-weight: 500;">My status</div>
+                    <div style="font-size: 13px; color: var(--wa-text-secondary); margin-top: 2px;">Click to add status update</div>
+                </div>
+                <div style="margin-left: auto;">
+                    <input type="file" id="statusUploadInput" style="display:none;" accept="image/*,video/*" onchange="uploadStatusFile(event)">
+                    <button class="icon-btn" onclick="document.getElementById('statusUploadInput').click()">+</button>
+                </div>
+            </div>
+            
+            <div style="padding: 15px; font-size: 14px; color: var(--wa-teal); font-weight: 500; background: var(--wa-sidebar-bg);">RECENT UPDATES</div>
+            <div class="status-list" id="statusList"></div>
+        </div>
+
+        <div class="status-player-area">
+            <div id="statusPlayer" style="display:none; width: 100%; height: 100%; position: relative;">
+                <div class="status-player-header">
+                    <div class="user-avatar" id="statusPlayerAvatar" style="width: 40px; height: 40px; margin-right: 12px; font-size: 16px;"></div>
+                    <div>
+                        <div id="statusPlayerName" style="font-weight: 500; font-size: 15px;"></div>
+                        <div id="statusPlayerTime" style="font-size: 12px; color: rgba(255,255,255,0.7);"></div>
+                    </div>
+                </div>
+                
+                <div id="statusPlayerContent" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000;"></div>
+                
+                <!-- Like Button -->
+                <button class="status-like-btn" id="statusLikeBtn" onclick="toggleStatusLike()">
+                    <span style="font-size: 24px;">🤍</span>
+                </button>
+            </div>
+            
+            <div id="statusEmpty" style="color: var(--wa-text-secondary); text-align: center; margin: auto;">
+                <div style="font-size: 64px; margin-bottom: 20px; opacity: 0.5;">⭕</div>
+                <h2>Click on a contact to view their status update</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- GROUP CREATE MODAL -->
+    <div class="modal-overlay" id="groupModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeGroupModal()">✕</button>
+            <h3>New Group</h3>
+            <div class="form-group">
+                <label>Group Name</label>
+                <input type="text" id="groupNameInput" placeholder="Enter group name">
+            </div>
+            <div class="form-group">
+                <label>Search members</label>
+                <input type="text" id="groupSearchInput" placeholder="Search by username" oninput="searchGroupMembers(this.value)">
+            </div>
+            <div class="selected-members" id="selectedMembers"></div>
+            <div id="groupSearchResults"></div>
+            <button class="btn-primary" onclick="createGroup()" style="margin-top:16px;">Create Group</button>
+        </div>
+    </div>
+
+    <!-- PIN MODAL -->
+    <div class="modal-overlay" id="pinModal">
+        <div class="modal" style="text-align:center;">
+            <button class="modal-close" onclick="closePinModal()">✕</button>
+            <h3>Locked Chats</h3>
+            <p style="color:var(--wa-text-secondary);margin-bottom:15px;">Enter your 4-digit PIN to view locked chats.</p>
+            <div class="form-group">
+                <input type="password" id="unlockPinInput" maxlength="4" style="text-align:center;letter-spacing:10px;font-size:24px;">
+            </div>
+            <button class="btn-primary" onclick="submitUnlockPin()" style="margin-top:16px;">Unlock</button>
+        </div>
+    </div>
+
+    <!-- CALL OVERLAY -->
+    <div class="call-overlay" id="callOverlay">
+        <div class="call-info" id="callInfo">
+            <div class="call-avatar" id="callAvatar">U</div>
+            <div class="call-name" id="callName">User</div>
+            <div class="call-status" id="callStatus">Calling...</div>
+        </div>
+        <div class="video-container" id="videoContainer">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div class="local-video"><video id="localVideo" autoplay playsinline muted></video></div>
+        </div>
+        <div class="call-actions" id="callActions">
+            <button class="call-btn mute" id="muteBtn" onclick="toggleMute()">🎤</button>
+            <button class="call-btn reject" onclick="endCall()">📵</button>
+            <button class="call-btn accept" id="acceptBtn" onclick="acceptCall()" style="display:none;">📞</button>
+        </div>
+    </div>
+
+    <!-- INCOMING CALL OVERLAY -->
+    <div class="call-overlay" id="incomingCallOverlay">
+        <div class="call-info">
+            <div class="call-avatar" id="inCallAvatar">U</div>
+            <div class="call-name" id="inCallName">User</div>
+            <div class="call-status" id="inCallStatus">Incoming call...</div>
+        </div>
+        <div class="call-actions">
+            <button class="call-btn reject" onclick="rejectIncomingCall()">📵</button>
+            <button class="call-btn accept" onclick="acceptIncomingCall()">📞</button>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/calls.js"></script>
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
