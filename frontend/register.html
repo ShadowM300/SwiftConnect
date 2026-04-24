@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftConnect — Register</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <div class="logo-icon">⚡</div>
+                <h1>SwiftConnect</h1>
+                <p>Create your account</p>
+            </div>
+            <div class="error-msg" id="errorMsg"></div>
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="first_name">First Name</label>
+                        <input type="text" id="first_name" placeholder="First name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="last_name">Last Name</label>
+                        <input type="text" id="last_name" placeholder="Last name" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Choose a username" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="your@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone_number">Phone Number</label>
+                    <input type="tel" id="phone_number" placeholder="+91 XXXXX XXXXX">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="Min 6 characters" required minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label for="password2">Confirm</label>
+                        <input type="password" id="password2" placeholder="Confirm" required minlength="6">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" id="registerBtn">Create Account</button>
+            </form>
+            <div class="auth-footer">
+                Already have an account? <a href="/">Sign in</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        const API_BASE = window.location.origin;
+        if (localStorage.getItem('access_token')) window.location.href = '/chat/';
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('registerBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.style.display = 'none';
+            btn.textContent = 'Creating...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/accounts/register/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('username').value,
+                        email: document.getElementById('email').value,
+                        first_name: document.getElementById('first_name').value,
+                        last_name: document.getElementById('last_name').value,
+                        phone_number: document.getElementById('phone_number').value,
+                        password: document.getElementById('password').value,
+                        password2: document.getElementById('password2').value,
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    // Auto-login after register
+                    const loginRes = await fetch(`${API_BASE}/api/accounts/login/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: document.getElementById('username').value,
+                            password: document.getElementById('password').value,
+                        })
+                    });
+                    const loginData = await loginRes.json();
+                    if (loginRes.ok) {
+                        localStorage.setItem('access_token', loginData.access);
+                        localStorage.setItem('refresh_token', loginData.refresh);
+                        window.location.href = '/chat/';
+                    } else {
+                        window.location.href = '/';
+                    }
+                } else {
+                    const errors = Object.values(data).flat().join(', ');
+                    errorMsg.textContent = errors || 'Registration failed';
+                    errorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                errorMsg.textContent = 'Network error. Please try again.';
+                errorMsg.style.display = 'block';
+            }
+            btn.textContent = 'Create Account';
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>
