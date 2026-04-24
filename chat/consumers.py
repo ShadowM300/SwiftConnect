@@ -128,6 +128,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             for p in conv.participants.exclude(id=self.user.id):
                 MessageStatus.objects.create(message=msg, user=p, status='sent')
 
+            # Build reply_to_message object if applicable
+            reply_to_message = None
+            if reply_to_id:
+                try:
+                    reply_msg = Message.objects.get(id=reply_to_id)
+                    reply_to_message = {
+                        'id': reply_msg.id,
+                        'sender': reply_msg.sender.id,
+                        'sender_name': reply_msg.sender.username,
+                        'content': reply_msg.content,
+                        'message_type': reply_msg.message_type,
+                    }
+                except Message.DoesNotExist:
+                    pass
+
             return {
                 'id': msg.id,
                 'sender': self.user.id,
@@ -136,7 +151,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message_type': 'text',
                 'timestamp': msg.timestamp.isoformat(),
                 'reply_to': reply_to_id,
-                'status': 'sent',
+                'reply_to_message': reply_to_message,
+                'overall_status': 'sent',
+                'is_deleted': False,
             }
         except Exception:
             return None

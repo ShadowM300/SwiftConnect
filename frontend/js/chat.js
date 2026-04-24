@@ -276,7 +276,17 @@ function renderMessages() {
         bubble.className = `message-bubble ${bubbleClass}`;
         bubble.dataset.msgId = msg.id;
         bubble.innerHTML = content;
+        // Double-click to reply (desktop)
         bubble.ondblclick = () => setReply(msg);
+        // Right-click context menu
+        bubble.addEventListener('contextmenu', (e) => showMessageContextMenu(e, msg));
+        // Touch swipe-right to reply (mobile)
+        let touchStartX = 0;
+        bubble.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+        bubble.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            if (dx > 60) setReply(msg); // swipe right ~60px
+        });
         area.appendChild(bubble);
     });
 }

@@ -129,15 +129,25 @@
 
                 <div class="messages-area" id="messagesArea"></div>
 
+                <!-- Message context menu -->
+                <div class="msg-context-menu" id="msgContextMenu" style="display:none;">
+                    <div class="msg-ctx-item" onclick="replyFromContextMenu()">↩️ Reply</div>
+                    <div class="msg-ctx-item" onclick="copyFromContextMenu()">📋 Copy</div>
+                </div>
+
                 <div class="typing-indicator" id="typingIndicator">
                     <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <span id="typingText" style="font-size:13px;color:var(--wa-text-secondary);margin-left:4px;">typing...</span>
                 </div>
 
                 <div class="reply-bar" id="replyBar">
-                    <div class="reply-name" id="replyName"></div>
-                    <div class="reply-text" id="replyText"></div>
-                    <button class="reply-close" onclick="cancelReply()">✕</button>
+                    <div class="reply-bar-content">
+                        <div style="flex:1; min-width:0;">
+                            <div class="reply-name" id="replyName"></div>
+                            <div class="reply-text" id="replyText"></div>
+                        </div>
+                        <button class="reply-close" onclick="cancelReply()">✕</button>
+                    </div>
                 </div>
 
                 <div class="file-preview-bar" id="filePreview">
@@ -149,6 +159,19 @@
                 <div class="message-input-area" id="messageInputArea">
                     <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Attach">📎</button>
                     <input type="file" id="fileInput" style="display:none" onchange="handleFileSelect(event)" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.txt">
+                    
+                    <!-- Emoji Picker Wrapper -->
+                    <div class="emoji-picker-wrapper" style="position:relative;">
+                        <button class="icon-btn emoji-toggle-btn" id="emojiToggleBtn" onclick="toggleEmojiPicker()" title="Emoji">😊</button>
+                        <div class="emoji-picker-panel" id="emojiPanel" style="display:none;">
+                            <div class="emoji-search-bar">
+                                <input type="text" id="emojiSearch" placeholder="Search emoji..." oninput="filterEmojis(this.value)" autocomplete="off">
+                            </div>
+                            <div class="emoji-categories" id="emojiCategories"></div>
+                            <div class="emoji-grid" id="emojiGrid"></div>
+                        </div>
+                    </div>
+
                     <div class="input-wrapper">
                         <textarea id="messageInput" placeholder="Type a message" rows="1" oninput="autoResize(this);sendTyping();" onkeydown="handleKeyDown(event)"></textarea>
                     </div>
@@ -266,21 +289,24 @@
         </div>
     </div>
 
-    <!-- CALL OVERLAY -->
+    <!-- OUTGOING CALL OVERLAY -->
     <div class="call-overlay" id="callOverlay">
         <div class="call-info" id="callInfo">
             <div class="call-avatar" id="callAvatar">U</div>
             <div class="call-name" id="callName">User</div>
             <div class="call-status" id="callStatus">Calling...</div>
         </div>
-        <div class="video-container" id="videoContainer">
+        <div class="video-container" id="videoContainer" style="display:none;">
             <video id="remoteVideo" autoplay playsinline></video>
             <div class="local-video"><video id="localVideo" autoplay playsinline muted></video></div>
         </div>
+        <!-- Hidden audio element for voice calls -->
+        <audio id="remoteAudio" autoplay></audio>
         <div class="call-actions" id="callActions">
             <button class="call-btn mute" id="muteBtn" onclick="toggleMute()">🎤</button>
             <button class="call-btn reject" onclick="endCall()">📵</button>
-            <button class="call-btn accept" id="acceptBtn" onclick="acceptCall()" style="display:none;">📞</button>
+            <button class="call-btn camera-toggle" id="cameraBtn" onclick="toggleCamera()" style="display:none; background:#3b4a54; color:white;">📹</button>
+            <button class="call-btn accept" id="acceptBtn" onclick="acceptIncomingCall()" style="display:none;">📞</button>
         </div>
     </div>
 
@@ -302,5 +328,6 @@
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/calls.js"></script>
     <script src="/static/js/chat.js"></script>
+    <script src="/static/js/emoji.js"></script>
 </body>
 </html>
