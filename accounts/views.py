@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.models import User
 from django.db.models import Q
-from .serializers import RegisterSerializer, UserProfileSerializer, UserSearchSerializer
-from .models import UserProfile
+from .serializers import RegisterSerializer, UserProfileSerializer, UserSearchSerializer, NoteSerializer
+from .models import UserProfile, UserNote
 
 
 class RegisterView(generics.CreateAPIView):
@@ -47,6 +47,10 @@ class ProfileView(APIView):
             profile.about = request.data['about']
         if 'chat_lock_pin' in request.data:
             profile.chat_lock_pin = request.data['chat_lock_pin']
+        if 'study_mode_active' in request.data:
+            # Handle both string 'true'/'false' and boolean True/False
+            val = request.data['study_mode_active']
+            profile.study_mode_active = str(val).lower() == 'true'
         if 'avatar' in request.FILES:
             profile.avatar = request.FILES['avatar']
         profile.save()
@@ -85,7 +89,7 @@ class UserSearchView(APIView):
 
 
 class UserDetailView(APIView):
-    """Get details of a specific user."""
+    """Get details of a specific user (including their active note)."""
 
     def get(self, request, user_id):
         try:
@@ -94,3 +98,40 @@ class UserDetailView(APIView):
             return Response(serializer.data)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
+
+
+class NoteView(APIView):
+    """Get, create/update, or delete the current user's note."""
+
+    def get(self, request):
+        """Get the current user's active note."""
+        try:
+            note = request.user.note
+            if not note.is_active:
+                note.delete()
+                return Response({'note': None})
+            serializer = NoteSerializer(note)
+            return Response({'note': serializer.data})
+        except UserNote.DoesNotExist:
+            return Response({'note': None})
+
+    def post(self, request):
+        """Create or replace the current user's note (resets 24h timer)."""
+        content = request.data.get('content', '').strip()
+        emoji = request.data.get('emoji', '📝').strip() or '📝'
+
+        if not content:
+            return Response({'error': 'Note content cannot be empty.'}, status=400)
+        if len(content) > 280:
+            return Response({'error': 'Note too long. Max 280 characters.'}, status=400)
+
+        # Delete old note to reset expiry
+        UserNote.objects.filter(user=request.user).delete()
+        note = UserNote.objects.create(user=request.user, content=content, emoji=emoji)
+        serializer = NoteSerializer(note)
+        return Response({'note': serializer.data}, status=201)
+
+    def delete(self, request):
+        """Delete the current user's note."""
+        UserNote.objects.filter(user=request.user).delete()
+        return Response({'message': 'Note deleted.'}, status=204)

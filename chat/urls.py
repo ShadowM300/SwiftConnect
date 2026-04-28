@@ -11,6 +11,16 @@ urlpatterns = [
     path('messages/<int:conversation_id>/', views.MessageListView.as_view(), name='message_list'),
     path('messages/<int:conversation_id>/upload/', views.FileUploadView.as_view(), name='file_upload'),
     
+    # Starred Messages
+    path('messages/<int:conversation_id>/starred/', views.StarredMessageListView.as_view(), name='starred_messages'),
+    path('messages/<int:message_id>/star/', views.StarredMessageToggleView.as_view(), name='star_message'),
+    
+    # Clear Chat
+    path('conversations/<int:conversation_id>/clear/', views.ClearChatView.as_view(), name='clear_chat'),
+    
+    # Media List
+    path('conversations/<int:conversation_id>/media/', views.MediaListView.as_view(), name='media_list'),
+    
     # Status URLs
     path('status/', views.StatusListView.as_view(), name='status_list'),
     path('status/create/', views.StatusCreateView.as_view(), name='status_create'),

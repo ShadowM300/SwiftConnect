@@ -39,6 +39,9 @@
                 <div class="sidebar-section-btn" onclick="promptLockPin()" id="lockedBtn">
                     <span>🔒</span> Locked Chats
                 </div>
+                <div class="sidebar-section-btn" onclick="toggleStudyMode()" id="studyModeBtn">
+                    <span>📚</span> Study Mode <span id="studyModeStatus" style="font-size:11px; color:var(--wa-green); display:none; margin-left:8px;">ON</span>
+                </div>
             </div>
 
             <div class="conversation-list" id="conversationList"></div>
@@ -50,6 +53,48 @@
                     <h2>Profile</h2>
                 </div>
                 <div class="profile-content">
+
+                    <!-- MY NOTE SECTION (top of profile) -->
+                    <div class="my-note-section" id="myNoteSection">
+                        <div class="my-note-label">📝 My Note <span id="myNoteExpiry" class="note-expiry-badge"></span></div>
+                        <div class="my-note-editor" id="myNoteDisplay">
+                            <div class="note-emoji-row">
+                                <button class="note-emoji-btn" id="noteEmojiBtn" onclick="toggleNoteEmojiPicker()" title="Pick emoji">📝</button>
+                                <div class="note-emoji-picker" id="noteEmojiPicker" style="display:none;">
+                                    <span onclick="pickNoteEmoji('📝')">📝</span>
+                                    <span onclick="pickNoteEmoji('💭')">💭</span>
+                                    <span onclick="pickNoteEmoji('💡')">💡</span>
+                                    <span onclick="pickNoteEmoji('🎯')">🎯</span>
+                                    <span onclick="pickNoteEmoji('🔥')">🔥</span>
+                                    <span onclick="pickNoteEmoji('✨')">✨</span>
+                                    <span onclick="pickNoteEmoji('🚀')">🚀</span>
+                                    <span onclick="pickNoteEmoji('😊')">😊</span>
+                                    <span onclick="pickNoteEmoji('❤️')">❤️</span>
+                                    <span onclick="pickNoteEmoji('🌙')">🌙</span>
+                                    <span onclick="pickNoteEmoji('☀️')">☀️</span>
+                                    <span onclick="pickNoteEmoji('🎵')">🎵</span>
+                                    <span onclick="pickNoteEmoji('📚')">📚</span>
+                                    <span onclick="pickNoteEmoji('💪')">💪</span>
+                                    <span onclick="pickNoteEmoji('🍕')">🍕</span>
+                                    <span onclick="pickNoteEmoji('☕')">☕</span>
+                                    <span onclick="pickNoteEmoji('🎮')">🎮</span>
+                                    <span onclick="pickNoteEmoji('🌿')">🌿</span>
+                                    <span onclick="pickNoteEmoji('🦋')">🦋</span>
+                                    <span onclick="pickNoteEmoji('🎉')">🎉</span>
+                                </div>
+                            </div>
+                            <textarea id="myNoteInput" class="note-textarea" maxlength="280" placeholder="What's on your mind? Your note disappears in 24 hours..."></textarea>
+                            <div class="note-actions-row">
+                                <span id="myNoteCharCount" class="note-char-count">0 / 280</span>
+                                <div style="display:flex;gap:8px;">
+                                    <button class="note-clear-btn" id="noteClearBtn" onclick="clearMyNote()" style="display:none;">Clear</button>
+                                    <button class="note-save-btn" onclick="saveMyNote()">Post Note</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="note-info-text">Your note is visible to your contacts and disappears after 24 hours.</div>
+                    </div>
+
                     <div class="profile-avatar-container" onclick="document.getElementById('profileAvatarInput').click()">
                         <div class="user-avatar" id="profileAvatarDisplay" style="width:200px; height:200px; font-size:60px; margin: 0 auto;">U</div>
                         <div class="avatar-overlay">
@@ -99,6 +144,8 @@
             </div>
         </div>
 
+
+
         <!-- RIGHT CHAT PANEL -->
         <div class="chat-panel" id="chatPanel">
             <div class="empty-chat" id="emptyChat">
@@ -132,6 +179,7 @@
                 <!-- Message context menu -->
                 <div class="msg-context-menu" id="msgContextMenu" style="display:none;">
                     <div class="msg-ctx-item" onclick="replyFromContextMenu()">↩️ Reply</div>
+                    <div class="msg-ctx-item" onclick="starFromContextMenu()">⭐ Star</div>
                     <div class="msg-ctx-item" onclick="copyFromContextMenu()">📋 Copy</div>
                 </div>
 
@@ -173,9 +221,28 @@
                     </div>
 
                     <div class="input-wrapper">
-                        <textarea id="messageInput" placeholder="Type a message" rows="1" oninput="autoResize(this);sendTyping();" onkeydown="handleKeyDown(event)"></textarea>
+                        <textarea id="messageInput" placeholder="Type a message" rows="1" oninput="autoResize(this);sendTyping();toggleSendMic();" onkeydown="handleKeyDown(event)"></textarea>
                     </div>
-                    <button class="send-btn" onclick="sendMessage()" id="sendBtn">➤</button>
+                    <button class="send-btn" onclick="sendMessage()" id="sendBtn" style="display:none;">➤</button>
+                    <button class="mic-btn" onclick="startVoiceRecording()" id="micBtn" title="Voice message">🎙️</button>
+                </div>
+
+                <!-- Voice Recording Overlay -->
+                <div class="voice-record-bar" id="voiceRecordBar">
+                    <button class="voice-cancel-btn" onclick="cancelVoiceRecording()" title="Cancel">🗑️</button>
+                    <div class="voice-record-info">
+                        <div class="voice-record-dot"></div>
+                        <span class="voice-record-timer" id="voiceTimer">0:00</span>
+                        <div class="voice-waveform" id="voiceWaveform">
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                            <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                        </div>
+                    </div>
+                    <button class="voice-send-btn" onclick="stopAndSendVoice()" title="Send">➤</button>
                 </div>
                 
                 <div class="blocked-message-area" id="blockedMessageArea" style="display:none; padding:15px; text-align:center; background:var(--wa-bg-panel); color:var(--wa-text-secondary);">
@@ -184,21 +251,231 @@
                 </div>
             </div>
 
-            <!-- CONTACT INFO PANEL (Slides from right) -->
-            <div class="contact-info-panel" id="contactInfoPanel">
-                <div class="contact-info-header">
-                    <button class="icon-btn" onclick="closeContactInfo()" style="color:white;">✕</button>
-                    <h2>Contact info</h2>
+            <!-- RIGHT CHAT INFO SIDEBAR (WhatsApp Style) -->
+            <div class="chat-info-sidebar" id="chatInfoSidebar">
+                <div class="sidebar-header" style="height: 60px; display: flex; align-items: center; padding: 0 20px; background: var(--wa-panel-header); border-left: 1px solid var(--wa-border);">
+                    <button class="icon-btn" onclick="closeChatInfo()" style="margin-right: 20px;">✕</button>
+                    <div style="font-size: 16px; font-weight: 500;" id="chatInfoHeaderText">Group info</div>
                 </div>
-                <div class="contact-info-content">
-                    <div class="contact-info-hero">
-                        <div class="user-avatar" id="contactInfoAvatar" style="width:200px; height:200px; font-size:60px; margin: 0 auto; margin-bottom: 20px;"></div>
-                        <h2 id="contactInfoName" style="font-size: 24px; font-weight: 400; margin-bottom: 5px;"></h2>
-                        <div id="contactInfoPhone" style="color: var(--wa-text-secondary); font-size: 16px;"></div>
+                
+                <div class="chat-info-scrollable" style="overflow-y: auto; flex: 1; background: var(--wa-sidebar-bg);">
+                    <!-- Header Info with Profile Photo -->
+                    <div style="padding: 30px 20px 20px; text-align: center; background: var(--wa-bg);">
+                        <div class="chat-info-avatar-wrapper" id="chatInfoAvatarWrapper">
+                            <div class="user-avatar" id="chatInfoAvatar" style="width: 200px; height: 200px; font-size: 80px; margin: 0 auto 20px auto;">U</div>
+                            <div class="chat-info-avatar-overlay" id="chatInfoAvatarOverlay" style="display:none;" onclick="document.getElementById('chatInfoPhotoInput').click()">
+                                <span style="font-size: 24px;">📷</span>
+                                <span style="font-size: 11px; margin-top: 6px; font-weight: 500;">VIEW PHOTO</span>
+                            </div>
+                        </div>
+                        <input type="file" id="chatInfoPhotoInput" style="display:none" accept="image/*" onchange="handleContactPhotoView(event)">
+                        <h2 id="chatInfoName" style="margin-bottom: 5px; font-size: 24px; font-weight: 400;">Group Name</h2>
+                        <div id="chatInfoSub" style="font-size: 16px;">
+                            <span id="chatInfoStatusDot" class="info-status-dot" style="display:none;"></span>
+                            <span id="chatInfoStatusText">Group · <span id="chatInfoCount">0</span> members</span>
+                        </div>
+                        <div id="chatInfoPhoneNumber" style="color: var(--wa-text-secondary); font-size: 14px; margin-top: 6px; display:none;"></div>
+                        
+                        <div style="display:none; justify-content:center; gap:15px; margin-top: 20px;" id="groupActionBtns">
+                            <button class="info-action-btn">
+                                <span style="font-size:24px; margin-bottom:8px;">👤+</span>
+                                Add
+                            </button>
+                            <button class="info-action-btn">
+                                <span style="font-size:20px; margin-bottom:8px;">🔍</span>
+                                Search
+                            </button>
+                        </div>
                     </div>
-                    <div class="contact-info-section">
-                        <label class="contact-info-label">About</label>
-                        <div id="contactInfoAbout" style="font-size: 16px;"></div>
+
+                    <div style="padding: 15px 20px; color: var(--wa-text-secondary); font-size: 14px; background: var(--wa-bg); margin-top: 2px; display: none;" id="groupCreatedByArea">
+                        <span id="chatInfoCreatedBy">Group created by Unknown</span>
+                    </div>
+                    
+                    <!-- Note section for contact/group info -->
+                    <div style="padding: 15px 20px; background: var(--wa-bg); margin-top: 2px; display: none;" id="contactNoteArea">
+                        <div style="font-size: 14px; color: var(--wa-text-secondary); margin-bottom: 8px;">Note</div>
+                        <div id="contactNoteDisplay" class="contact-note-bubble">
+                            <span id="contactNoteEmoji" style="font-size:24px; margin-right:10px;">📝</span>
+                            <div style="flex:1;">
+                                <div id="contactNoteText" style="font-size:15px; line-height:1.5;"></div>
+                                <div id="contactNoteExpiry" style="font-size:12px; color:var(--wa-text-secondary); margin-top:4px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="padding: 15px 20px; background: var(--wa-bg); margin-top: 2px; display: none;" id="contactAboutArea">
+                        <div style="font-size: 14px; color: var(--wa-text-secondary); margin-bottom: 5px;">About</div>
+                        <div id="contactInfoAboutText" style="font-size: 16px;"></div>
+                    </div>
+
+                    <!-- Media Section -->
+                    <div class="info-section" style="margin-top: 10px; background: var(--wa-bg); padding: 15px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="openMediaPanel()">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="font-size: 18px; color: var(--wa-text-secondary);">🖼️</span>
+                            <span>Media, links and docs</span>
+                        </div>
+                        <span style="color: var(--wa-text-secondary);">›</span>
+                    </div>
+
+                    <div id="mediaPreviewRow" style="display:flex; padding: 0 20px 20px; background: var(--wa-bg); gap: 5px; overflow-x:hidden;">
+                        <div class="media-thumb-placeholder" onclick="openMediaPanel('all')">📁</div>
+                        <div class="media-thumb-placeholder" onclick="openMediaPanel('image')">🖼️</div>
+                        <div class="media-thumb-placeholder" onclick="openMediaPanel('file')">📄</div>
+                        <div class="media-thumb-placeholder" onclick="openMediaPanel('audio')">🎵</div>
+                    </div>
+
+                    <!-- Settings Sections -->
+                    <div style="margin-top: 10px; background: var(--wa-bg);">
+                        <div class="info-section-item" onclick="openStarredMessages()">
+                            <span class="icon">⭐</span>
+                            <div class="text">Starred messages</div>
+                            <span class="arrow" style="color:var(--wa-text-secondary)">›</span>
+                        </div>
+                        <div class="info-section-item" onclick="openNotificationSettings()">
+                            <span class="icon">🔔</span>
+                            <div class="text">
+                                <div>Notification settings</div>
+                                <div class="info-sub-text" id="notifSettingsSub">On</div>
+                            </div>
+                            <span class="arrow" style="color:var(--wa-text-secondary)">›</span>
+                        </div>
+                        <div class="info-section-item">
+                            <span class="icon">🔒</span>
+                            <div class="text">
+                                <div>Encryption</div>
+                                <div class="info-sub-text">Messages are end-to-end encrypted. Click to learn more.</div>
+                            </div>
+                        </div>
+                        <div class="info-section-item" onclick="toggleAdvancedPrivacy()">
+                            <span class="icon">🛡️</span>
+                            <div class="text">
+                                <div>Advanced chat privacy</div>
+                                <div class="info-sub-text" id="advancedPrivacySub">Off</div>
+                            </div>
+                            <span class="arrow" style="color:var(--wa-text-secondary)">›</span>
+                        </div>
+                        <div class="info-section-item" onclick="toggleStudyAllowed()">
+                            <span class="icon">📚</span>
+                            <div class="text">
+                                <div>Allow in Study Mode</div>
+                                <div class="info-sub-text" id="studyAllowedSub">Off</div>
+                            </div>
+                            <span class="arrow" style="color:var(--wa-text-secondary)">›</span>
+                        </div>
+                    </div>
+
+                    <!-- Participants List -->
+                    <div id="groupParticipantsSection" style="margin-top: 10px; background: var(--wa-bg); padding-bottom: 20px; display: none;">
+                        <div style="padding: 15px 20px; color: var(--wa-text-secondary); font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="chatInfoListHeader">0 members</span>
+                            <span style="font-size: 16px; cursor: pointer;">🔍</span>
+                        </div>
+                        <div id="chatInfoParticipants">
+                            <!-- Injected via JS -->
+                        </div>
+                        
+                        <div style="padding: 15px 20px; color: var(--wa-green); cursor: pointer; font-size: 15px;">
+                            View all (more)
+                        </div>
+                    </div>
+
+                    <!-- Favourites & List Actions -->
+                    <div style="margin-top: 10px; background: var(--wa-bg);">
+                        <div class="info-section-item" id="viewMemberChangesBtn" style="display:none;"><span class="icon">📋</span><div class="text">View member changes</div></div>
+                        <div class="info-section-item" onclick="toggleFavourite()" id="favouriteBtn">
+                            <span class="icon" id="favouriteIcon">♡</span>
+                            <div class="text" id="favouriteText">Add to favourites</div>
+                        </div>
+                        <div class="info-section-item" onclick="showAddToList()">
+                            <span class="icon">📁</span>
+                            <div class="text">Add to list</div>
+                        </div>
+                    </div>
+
+                    <!-- Danger Actions -->
+                    <div style="margin-top: 10px; margin-bottom: 20px; background: var(--wa-bg);">
+                        <div class="info-section-item danger" onclick="clearChat()">
+                            <span class="icon">⛔</span>
+                            <div class="text" id="blockClearText">Clear chat</div>
+                        </div>
+                        <div class="info-section-item danger" id="exitGroupBtn" style="display:none;" onclick="exitGroup()">
+                            <span class="icon">🚪</span>
+                            <div class="text">Exit group</div>
+                        </div>
+                        <div class="info-section-item danger" onclick="reportContact()">
+                            <span class="icon">👎</span>
+                            <div class="text" id="reportText">Report group</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STARRED MESSAGES SUB-PANEL -->
+                <div class="chat-info-subpanel" id="starredMessagesPanel" style="display:none;">
+                    <div class="subpanel-header">
+                        <button class="icon-btn" onclick="closeStarredMessages()">←</button>
+                        <div style="font-size: 16px; font-weight: 500;">Starred messages</div>
+                    </div>
+                    <div class="subpanel-content" id="starredMessagesList">
+                        <div class="subpanel-empty">
+                            <span style="font-size: 48px; opacity: 0.5;">⭐</span>
+                            <p>No starred messages</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MEDIA SUB-PANEL -->
+                <div class="chat-info-subpanel" id="mediaPanel" style="display:none;">
+                    <div class="subpanel-header">
+                        <button class="icon-btn" onclick="closeMediaPanel()">←</button>
+                        <div style="font-size: 16px; font-weight: 500;">Media, links and docs</div>
+                    </div>
+                    <div class="media-tab-bar">
+                        <button class="media-tab active" onclick="switchMediaTab('all', this)">All</button>
+                        <button class="media-tab" onclick="switchMediaTab('image', this)">Photos</button>
+                        <button class="media-tab" onclick="switchMediaTab('video', this)">Videos</button>
+                        <button class="media-tab" onclick="switchMediaTab('file', this)">Docs</button>
+                        <button class="media-tab" onclick="switchMediaTab('audio', this)">Audio</button>
+                    </div>
+                    <div class="subpanel-content" id="mediaList">
+                        <div class="subpanel-empty">
+                            <span style="font-size: 48px; opacity: 0.5;">🖼️</span>
+                            <p>No media shared</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NOTIFICATION SETTINGS SUB-PANEL -->
+                <div class="chat-info-subpanel" id="notificationSettingsPanel" style="display:none;">
+                    <div class="subpanel-header">
+                        <button class="icon-btn" onclick="closeNotificationSettings()">←</button>
+                        <div style="font-size: 16px; font-weight: 500;">Notification settings</div>
+                    </div>
+                    <div class="subpanel-content" style="padding: 20px;">
+                        <div class="notif-setting-row">
+                            <div>
+                                <div style="font-size: 16px;">Mute notifications</div>
+                                <div class="info-sub-text" id="muteStatusText">Off</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="muteToggle" onchange="toggleMuteFromSettings()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="notif-setting-info">
+                            When muted, you won't receive notifications for messages in this chat. You'll still see unread messages.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PHOTO VIEWER MODAL -->
+                <div class="photo-viewer-overlay" id="photoViewer" style="display:none;">
+                    <div class="photo-viewer-header">
+                        <button class="icon-btn" onclick="closePhotoViewer()" style="color:white;">✕</button>
+                        <span id="photoViewerTitle" style="font-size:16px; font-weight:500;">Profile photo</span>
+                    </div>
+                    <div class="photo-viewer-content">
+                        <img id="photoViewerImg" src="" alt="Profile photo">
                     </div>
                 </div>
             </div>
@@ -323,11 +600,13 @@
         </div>
     </div>
 
-    <script src="/static/js/utils.js"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/websocket.js"></script>
-    <script src="/static/js/calls.js"></script>
-    <script src="/static/js/chat.js"></script>
-    <script src="/static/js/emoji.js"></script>
+    <script src="/static/js/utils.js?v=7"></script>
+    <script src="/static/js/auth.js?v=7"></script>
+    <script src="/static/js/websocket.js?v=7"></script>
+    <script src="/static/js/calls.js?v=7"></script>
+    <script src="/static/js/voice.js?v=7"></script>
+    <script src="/static/js/chat.js?v=7"></script>
+    <script src="/static/js/chatbot.js?v=7"></script>
+    <script src="/static/js/emoji.js?v=7"></script>
 </body>
 </html>

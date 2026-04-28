@@ -83,7 +83,7 @@ class ConversationSettingSerializer(serializers.ModelSerializer):
     class Meta:
         from .models import ConversationSetting
         model = ConversationSetting
-        fields = ['is_muted', 'is_archived', 'is_locked', 'is_blocked']
+        fields = ['is_muted', 'is_archived', 'is_locked', 'is_blocked', 'is_favourite', 'is_reported', 'advanced_privacy', 'is_study_allowed']
 
 class ConversationSerializer(serializers.ModelSerializer):
     participants = ParticipantSerializer(many=True, read_only=True)
@@ -96,11 +96,18 @@ class ConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
         fields = ['id', 'is_group', 'group_name', 'group_icon', 'participants',
-                  'created_by', 'created_at', 'updated_at', 'last_message',
+                  'created_by', 'hidden_participants', 'created_at', 'updated_at', 'last_message',
                   'unread_count', 'display_name', 'display_avatar', 'settings']
 
     def get_last_message(self, obj):
-        msg = obj.messages.order_by('-timestamp').first()
+        request = self.context.get('request')
+        qs = obj.messages.all()
+        if request and request.user:
+            setting = obj.settings.filter(user=request.user).first()
+            if setting and setting.cleared_at:
+                qs = qs.filter(timestamp__gte=setting.cleared_at)
+                
+        msg = qs.order_by('-timestamp').first()
         if msg:
             return {
                 'content': msg.content if not msg.is_deleted else 'This message was deleted',
@@ -114,7 +121,12 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_unread_count(self, obj):
         request = self.context.get('request')
         if request and request.user:
-            return obj.messages.exclude(sender=request.user).exclude(
+            qs = obj.messages.exclude(sender=request.user)
+            setting = obj.settings.filter(user=request.user).first()
+            if setting and setting.cleared_at:
+                qs = qs.filter(timestamp__gte=setting.cleared_at)
+                
+            return qs.exclude(
                 message_statuses__user=request.user,
                 message_statuses__status='seen'
             ).count()
@@ -156,6 +168,10 @@ class ConversationSerializer(serializers.ModelSerializer):
             'is_archived': False,
             'is_locked': False,
             'is_blocked': False,
+            'is_favourite': False,
+            'is_reported': False,
+            'advanced_privacy': False,
+            'is_study_allowed': False,
         }
 
 

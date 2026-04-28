@@ -134,6 +134,39 @@ class GroupManageView(APIView):
                 conversation.save()
                 return Response({'message': 'Group renamed'})
 
+        elif action == 'update_icon':
+            icon_file = request.FILES.get('group_icon')
+            if icon_file:
+                conversation.group_icon = icon_file
+                conversation.save()
+                return Response({
+                    'message': 'Group photo updated',
+                    'group_icon_url': request.build_absolute_uri(conversation.group_icon.url)
+                })
+            return Response({'error': 'No image file provided'}, status=400)
+                
+        elif action == 'hide_member':
+            if conversation.created_by != request.user:
+                return Response({'error': 'Only the admin can hide members'}, status=403)
+            user_id = request.data.get('user_id')
+            try:
+                user = User.objects.get(id=user_id)
+                conversation.hidden_participants.add(user)
+                return Response({'message': f'{user.username} is now hidden from group messages'})
+            except User.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+                
+        elif action == 'unhide_member':
+            if conversation.created_by != request.user:
+                return Response({'error': 'Only the admin can unhide members'}, status=403)
+            user_id = request.data.get('user_id')
+            try:
+                user = User.objects.get(id=user_id)
+                conversation.hidden_participants.remove(user)
+                return Response({'message': f'{user.username} is no longer hidden'})
+            except User.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+
         return Response({'error': 'Invalid action'}, status=400)
 
 
@@ -143,10 +176,24 @@ class MessageListView(generics.ListAPIView):
 
     def get_queryset(self):
         conversation_id = self.kwargs['conversation_id']
-        return Message.objects.filter(
+        from django.db.models import Q
+        from .models import ConversationSetting
+        
+        queryset = Message.objects.filter(
             conversation_id=conversation_id,
             conversation__participants=self.request.user
-        ).select_related('sender', 'sender__profile', 'reply_to').prefetch_related('message_statuses')
+        ).filter(
+            Q(sender=self.request.user) | Q(message_statuses__user=self.request.user)
+        )
+        
+        # Exclude messages that were sent before the user cleared the chat
+        setting = ConversationSetting.objects.filter(
+            user=self.request.user, conversation_id=conversation_id
+        ).first()
+        if setting and setting.cleared_at:
+            queryset = queryset.filter(timestamp__gte=setting.cleared_at)
+            
+        return queryset.distinct().select_related('sender', 'sender__profile', 'reply_to').prefetch_related('message_statuses')
 
     def list(self, request, *args, **kwargs):
         conversation_id = self.kwargs['conversation_id']
@@ -214,20 +261,22 @@ class FileUploadView(APIView):
         # Update conversation timestamp
         conversation.save()
 
-        # Create sent status for all other participants
+        # Create sent status for all other participants, excluding hidden
+        hidden_ids = list(conversation.hidden_participants.values_list('id', flat=True))
         for participant in conversation.participants.exclude(id=request.user.id):
-            MessageStatus.objects.create(
-                message=message,
-                user=participant,
-                status='sent'
-            )
+            if participant.id not in hidden_ids:
+                MessageStatus.objects.create(
+                    message=message,
+                    user=participant,
+                    status='sent'
+                )
 
         serializer = MessageSerializer(message, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class ConversationSettingView(APIView):
-    """Toggle settings (mute, block, archive, lock) for a conversation."""
+    """Toggle settings (mute, block, archive, lock, favourite, report, privacy) for a conversation."""
     def put(self, request, conversation_id):
         try:
             conversation = Conversation.objects.get(
@@ -249,9 +298,141 @@ class ConversationSettingView(APIView):
             setting.is_locked = request.data['is_locked']
         if 'is_blocked' in request.data:
             setting.is_blocked = request.data['is_blocked']
+        if 'is_favourite' in request.data:
+            setting.is_favourite = request.data['is_favourite']
+        if 'is_reported' in request.data:
+            setting.is_reported = request.data['is_reported']
+        if 'advanced_privacy' in request.data:
+            setting.advanced_privacy = request.data['advanced_privacy']
+        if 'is_study_allowed' in request.data:
+            setting.is_study_allowed = request.data['is_study_allowed']
             
         setting.save()
         return Response({'message': 'Settings updated'})
+
+
+class StarredMessageListView(APIView):
+    """List all starred messages for a conversation."""
+    def get(self, request, conversation_id):
+        from .models import StarredMessage
+        starred = StarredMessage.objects.filter(
+            user=request.user,
+            message__conversation_id=conversation_id
+        ).select_related('message', 'message__sender', 'message__sender__profile')
+        
+        messages_data = []
+        for sm in starred:
+            msg = sm.message
+            messages_data.append({
+                'id': msg.id,
+                'sender': msg.sender.username,
+                'sender_id': msg.sender.id,
+                'content': msg.content,
+                'message_type': msg.message_type,
+                'file_name': msg.file_name,
+                'timestamp': msg.timestamp.isoformat(),
+                'starred_at': sm.created_at.isoformat(),
+            })
+        
+        return Response(messages_data)
+
+
+class StarredMessageToggleView(APIView):
+    """Star or unstar a message."""
+    def post(self, request, message_id):
+        from .models import StarredMessage
+        try:
+            message = Message.objects.get(
+                id=message_id,
+                conversation__participants=request.user
+            )
+        except Message.DoesNotExist:
+            return Response({'error': 'Message not found'}, status=404)
+        
+        starred, created = StarredMessage.objects.get_or_create(
+            user=request.user, message=message
+        )
+        
+        if created:
+            return Response({'message': 'Message starred', 'starred': True})
+        else:
+            starred.delete()
+            return Response({'message': 'Message unstarred', 'starred': False})
+
+
+class ClearChatView(APIView):
+    """Clear all messages in a conversation for the current user."""
+    def post(self, request, conversation_id):
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id, participants=request.user
+            )
+        except Conversation.DoesNotExist:
+            return Response({'error': 'Conversation not found'}, status=404)
+        
+        # Set cleared_at timestamp for this user's conversation setting
+        from .models import ConversationSetting
+        from django.utils import timezone
+        
+        setting, _ = ConversationSetting.objects.get_or_create(
+            user=request.user, conversation=conversation
+        )
+        setting.cleared_at = timezone.now()
+        setting.save()
+        
+        # Delete starred messages for this user in this conversation
+        from .models import StarredMessage
+        StarredMessage.objects.filter(
+            user=request.user,
+            message__conversation=conversation
+        ).delete()
+        
+        return Response({'message': 'Chat cleared'})
+
+
+class MediaListView(APIView):
+    """Get media files shared in a conversation."""
+    def get(self, request, conversation_id):
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id, participants=request.user
+            )
+        except Conversation.DoesNotExist:
+            return Response({'error': 'Conversation not found'}, status=404)
+        
+        media_type = request.query_params.get('type', 'all')
+        
+        messages = Message.objects.filter(
+            conversation=conversation
+        ).exclude(message_type='text').exclude(file='').exclude(file__isnull=True)
+        
+        if media_type == 'image':
+            messages = messages.filter(message_type='image')
+        elif media_type == 'video':
+            messages = messages.filter(message_type='video')
+        elif media_type == 'audio':
+            messages = messages.filter(message_type='audio')
+        elif media_type == 'file':
+            messages = messages.filter(message_type='file')
+        
+        messages = messages.order_by('-timestamp')[:50]
+        
+        media_data = []
+        for msg in messages:
+            file_url = None
+            if msg.file:
+                file_url = request.build_absolute_uri(msg.file.url)
+            media_data.append({
+                'id': msg.id,
+                'sender': msg.sender.username,
+                'message_type': msg.message_type,
+                'file_url': file_url,
+                'file_name': msg.file_name,
+                'file_size': msg.file_size,
+                'timestamp': msg.timestamp.isoformat(),
+            })
+        
+        return Response(media_data)
 
 
 class ConversationDetailView(APIView):

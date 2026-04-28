@@ -39,7 +39,15 @@ function renderConversations() {
     document.getElementById('archivedBtn').style.background = currentSidebarView === 'archived' ? 'var(--wa-bg-hover)' : '';
     document.getElementById('lockedBtn').style.background = currentSidebarView === 'locked' ? 'var(--wa-bg-hover)' : '';
 
-    const filteredConversations = conversations.filter(conv => {
+    // Update Study Mode UI
+    const studyStatusEl = document.getElementById('studyModeStatus');
+    const isStudyActive = currentUser && (currentUser.study_mode_active === true || String(currentUser.study_mode_active).toLowerCase() === 'true');
+    if (studyStatusEl) {
+        studyStatusEl.style.display = isStudyActive ? 'inline-block' : 'none';
+    }
+    document.getElementById('studyModeBtn').style.background = isStudyActive ? 'var(--wa-bg-hover)' : '';
+
+    let filteredConversations = conversations.filter(conv => {
         const isArchived = conv.settings?.is_archived;
         const isLocked = conv.settings?.is_locked;
         
@@ -47,6 +55,13 @@ function renderConversations() {
         if (currentSidebarView === 'locked') return isLocked;
         return !isArchived && !isLocked;
     });
+
+    // Apply Study Mode Filter
+    if (isStudyActive) {
+        filteredConversations = filteredConversations.filter(conv => {
+            return conv.settings && (conv.settings.is_study_allowed === true || conv.settings.is_study_allowed === 'true');
+        });
+    }
 
     if (filteredConversations.length === 0) {
         list.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--wa-text-secondary)">No conversations found in this section.</div>`;
@@ -253,7 +268,10 @@ function renderMessages() {
         } else if (msg.message_type === 'video' && msg.file_url) {
             content += `<div class="message-video"><video src="${msg.file_url}" controls></video></div>`;
             if (msg.content) content += `<div class="message-text">${escapeHtml(msg.content)}</div>`;
-        } else if ((msg.message_type === 'file' || msg.message_type === 'audio') && msg.file_url) {
+        } else if (msg.message_type === 'audio' && msg.file_url) {
+            content += renderVoicePlayer(msg.file_url, msg.id);
+            if (msg.content) content += `<div class="message-text">${escapeHtml(msg.content)}</div>`;
+        } else if (msg.message_type === 'file' && msg.file_url) {
             content += `<div class="message-file" onclick="window.open('${msg.file_url}','_blank')">
                 <span class="file-icon">${getFileIcon(msg.message_type)}</span>
                 <div class="file-info">
@@ -629,6 +647,9 @@ async function toggleProfileModal() {
             }
         }
     } catch (e) { console.error(e); }
+
+    // Load the user's current note into the note editor
+    await loadMyNote();
 }
 
 function closeProfileModal() {
@@ -967,3 +988,968 @@ setInterval(() => {
         fetchNotifications();
     }
 }, 30000);
+
+// ===== CHAT INFO SIDEBAR =====
+function openChatInfo() {
+    if (!activeConversation) return;
+    
+    // Close any open sub-panels first
+    document.getElementById('starredMessagesPanel').style.display = 'none';
+    document.getElementById('mediaPanel').style.display = 'none';
+    document.getElementById('notificationSettingsPanel').style.display = 'none';
+    document.getElementById('photoViewer').style.display = 'none';
+    
+    document.getElementById('chatInfoSidebar').classList.add('active');
+    
+    // Set Header Info
+    const name = activeConversation.display_name || 'Chat';
+    document.getElementById('chatInfoName').textContent = name;
+    
+    // Set avatar with click-to-view overlay
+    const avatarEl = document.getElementById('chatInfoAvatar');
+    const overlayEl = document.getElementById('chatInfoAvatarOverlay');
+    
+    if (activeConversation.display_avatar) {
+        avatarEl.innerHTML = `<img src="${activeConversation.display_avatar}" alt="">`;
+        overlayEl.style.display = 'flex';
+        
+        // Make avatar clickable to view photo
+        avatarEl.style.cursor = 'pointer';
+        avatarEl.onclick = () => {
+            openPhotoViewer(activeConversation.display_avatar, name);
+        };
+    } else {
+        avatarEl.textContent = getInitials(name);
+        overlayEl.style.display = 'none';
+        avatarEl.onclick = null;
+        avatarEl.style.cursor = 'default';
+    }
+    
+    // Set notification/privacy sub-text from settings
+    const settings = activeConversation.settings || {};
+    document.getElementById('notifSettingsSub').textContent = settings.is_muted ? 'Muted' : 'On';
+    document.getElementById('advancedPrivacySub').textContent = settings.advanced_privacy ? 'On' : 'Off';
+    document.getElementById('studyAllowedSub').textContent = settings.is_study_allowed ? 'On' : 'Off';
+    
+    // Set favourite state
+    const favIcon = document.getElementById('favouriteIcon');
+    const favText = document.getElementById('favouriteText');
+    if (settings.is_favourite) {
+        favIcon.textContent = '❤️';
+        favText.textContent = 'Remove from favourites';
+    } else {
+        favIcon.textContent = '♡';
+        favText.textContent = 'Add to favourites';
+    }
+    
+    if (activeConversation.is_group) {
+        document.getElementById('chatInfoHeaderText').textContent = 'Group info';
+        document.getElementById('chatInfoStatusText').innerHTML = `Group · ${activeConversation.participants.length} members`;
+        document.getElementById('chatInfoStatusDot').style.display = 'none';
+        document.getElementById('chatInfoPhoneNumber').style.display = 'none';
+        document.getElementById('groupActionBtns').style.display = 'flex';
+        
+        const creator = activeConversation.participants.find(p => p.id === activeConversation.created_by);
+        document.getElementById('chatInfoCreatedBy').textContent = `Group created by ${creator ? (creator.first_name || creator.username) : 'Unknown'}, on ${new Date(activeConversation.created_at).toLocaleDateString()}`;
+        document.getElementById('groupCreatedByArea').style.display = 'block';
+        document.getElementById('contactAboutArea').style.display = 'none';
+        document.getElementById('contactNoteArea').style.display = 'none';
+        
+        document.getElementById('groupParticipantsSection').style.display = 'block';
+        document.getElementById('chatInfoListHeader').textContent = `${activeConversation.participants.length} members`;
+        
+        document.getElementById('viewMemberChangesBtn').style.display = 'flex';
+        document.getElementById('exitGroupBtn').style.display = 'flex';
+        document.getElementById('reportText').textContent = 'Report group';
+        
+        // Render Participants
+        const container = document.getElementById('chatInfoParticipants');
+        container.innerHTML = '';
+        
+        const isAdmin = activeConversation.created_by === currentUser.id;
+        const hiddenIds = activeConversation.hidden_participants || [];
+        
+        // Put "You" first
+        const me = activeConversation.participants.find(p => p.id === currentUser.id);
+        const others = activeConversation.participants.filter(p => p.id !== currentUser.id);
+        const sortedParticipants = me ? [me, ...others] : others;
+        
+        sortedParticipants.forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'member-list-item';
+            
+            const isUserAdmin = activeConversation.created_by === p.id;
+            const isHidden = hiddenIds.includes(p.id);
+            const isMe = p.id === currentUser.id;
+            
+            let badges = '';
+            if (isUserAdmin) {
+                badges += `<span style="background: var(--wa-panel-header); border: 1px solid var(--wa-green); color: var(--wa-green); font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Group admin</span>`;
+            }
+            if (isHidden) {
+                badges += `<span style="background: #ff4a4a; color: white; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Hidden</span>`;
+            }
+            
+            let subText = isMe ? `<span style="color:var(--wa-green);">Add member tag</span><br>${escapeHtml(p.about || 'Available')}` : escapeHtml(p.about || 'Available');
+            
+            const avatarHtml = p.avatar ? `<img src="${p.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : getInitials(p.first_name || p.username);
+            
+            item.innerHTML = `
+                <div class="user-avatar" style="width: 40px; height: 40px; font-size: 16px; margin-right: 15px; flex-shrink:0;">
+                    ${avatarHtml}
+                </div>
+                <div style="flex: 1; overflow:hidden;">
+                    <div style="font-weight: 500; font-size:16px;">${isMe ? 'You' : escapeHtml(p.first_name || p.username)}</div>
+                    <div style="font-size: 13px; color: var(--wa-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">${subText}</div>
+                </div>
+                <div style="text-align:right;">
+                    ${badges}
+                </div>
+            `;
+            
+            // Allow admin to click others to toggle hide
+            if (isAdmin && !isMe) {
+                item.onclick = () => {
+                    if (confirm(`Do you want to ${isHidden ? 'unhide' : 'hide'} this user from group activity?`)) {
+                        toggleHideMember(p.id, isHidden);
+                    }
+                };
+            }
+            
+            container.appendChild(item);
+        });
+        
+    } else {
+        document.getElementById('chatInfoHeaderText').textContent = 'Contact info';
+        
+        const other = activeConversation.participants.find(p => p.id !== currentUser.id) || {};
+        const isOnline = onlineUsers.has(other.id);
+        
+        // Show online/offline with status dot
+        const statusDot = document.getElementById('chatInfoStatusDot');
+        statusDot.style.display = 'inline-block';
+        statusDot.className = `info-status-dot ${isOnline ? 'online' : 'offline'}`;
+        document.getElementById('chatInfoStatusText').textContent = isOnline ? 'Online' : 'Offline';
+        
+        // Show phone number
+        const phoneEl = document.getElementById('chatInfoPhoneNumber');
+        if (other.phone_number) {
+            phoneEl.textContent = other.phone_number;
+            phoneEl.style.display = 'block';
+        } else {
+            phoneEl.style.display = 'none';
+        }
+        
+        document.getElementById('groupActionBtns').style.display = 'none';
+        document.getElementById('groupCreatedByArea').style.display = 'none';
+        
+        document.getElementById('contactAboutArea').style.display = 'block';
+        document.getElementById('contactInfoAboutText').textContent = other.about || 'Available';
+        
+        document.getElementById('groupParticipantsSection').style.display = 'none';
+        
+        document.getElementById('viewMemberChangesBtn').style.display = 'none';
+        document.getElementById('exitGroupBtn').style.display = 'none';
+        document.getElementById('reportText').textContent = 'Report contact';
+
+        // Load contact's active note
+        loadContactNote(other);
+        
+        // Fetch full contact profile for more info (including avatar)
+        fetchContactProfile(other.id);
+    }
+}
+
+async function fetchContactProfile(userId) {
+    if (!userId) return;
+    try {
+        const res = await apiFetch(`/api/chat/contact/${userId}/`);
+        if (res && res.ok) {
+            const data = await res.json();
+            
+            // Update avatar with full-res profile photo
+            const avatarEl = document.getElementById('chatInfoAvatar');
+            const overlayEl = document.getElementById('chatInfoAvatarOverlay');
+            
+            if (data.avatar) {
+                avatarEl.innerHTML = `<img src="${data.avatar}" alt="">`;
+                overlayEl.style.display = 'flex';
+                avatarEl.style.cursor = 'pointer';
+                avatarEl.onclick = () => {
+                    openPhotoViewer(data.avatar, data.username);
+                };
+            }
+            
+            // Update phone
+            if (data.phone_number) {
+                const phoneEl = document.getElementById('chatInfoPhoneNumber');
+                phoneEl.textContent = data.phone_number;
+                phoneEl.style.display = 'block';
+            }
+            
+            // Update about
+            if (data.about) {
+                document.getElementById('contactInfoAboutText').textContent = data.about;
+            }
+            
+            // Update name with full info
+            const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.username;
+            document.getElementById('chatInfoName').textContent = fullName;
+            
+            // Update online status
+            const statusDot = document.getElementById('chatInfoStatusDot');
+            statusDot.className = `info-status-dot ${data.is_online ? 'online' : 'offline'}`;
+            document.getElementById('chatInfoStatusText').textContent = data.is_online ? 'Online' : 'Offline';
+        }
+    } catch (e) { console.error('Fetch contact profile error:', e); }
+}
+
+function closeChatInfo() {
+    document.getElementById('chatInfoSidebar').classList.remove('active');
+    // Also close sub-panels
+    document.getElementById('starredMessagesPanel').style.display = 'none';
+    document.getElementById('mediaPanel').style.display = 'none';
+    document.getElementById('notificationSettingsPanel').style.display = 'none';
+    document.getElementById('photoViewer').style.display = 'none';
+}
+
+async function loadContactNote(otherUser) {
+    const noteArea = document.getElementById('contactNoteArea');
+    noteArea.style.display = 'none';
+    
+    if (!otherUser || !otherUser.id) return;
+    
+    try {
+        const res = await apiFetch(`/api/accounts/user/${otherUser.id}/`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        
+        const note = data.active_note;
+        if (note && note.content) {
+            document.getElementById('contactNoteEmoji').textContent = note.emoji || '📝';
+            document.getElementById('contactNoteText').textContent = note.content;
+            
+            // Compute time left label
+            const secs = note.time_left_seconds;
+            const hrs = Math.floor(secs / 3600);
+            const mins = Math.floor((secs % 3600) / 60);
+            let label = '';
+            if (hrs > 0) label = `Expires in ${hrs}h ${mins}m`;
+            else if (mins > 0) label = `Expires in ${mins}m`;
+            else label = 'Expires soon';
+            document.getElementById('contactNoteExpiry').textContent = label;
+            
+            noteArea.style.display = 'block';
+        }
+    } catch (e) { console.error('Failed to load contact note', e); }
+}
+
+async function toggleHideMember(userId, currentlyHidden) {
+    if (!activeConversation) return;
+    
+    const action = currentlyHidden ? 'unhide_member' : 'hide_member';
+    
+    try {
+        const res = await apiFetch(`/api/chat/groups/${activeConversation.id}/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ action: action, user_id: userId })
+        });
+        
+        if (res.ok) {
+            // Update local state temporarily, then refresh conversations
+            if (currentlyHidden) {
+                activeConversation.hidden_participants = activeConversation.hidden_participants.filter(id => id !== userId);
+            } else {
+                activeConversation.hidden_participants.push(userId);
+            }
+            openChatInfo(); // re-render
+            loadConversations(); // update background state
+        } else {
+            const err = await res.json();
+            alert(err.error || 'Failed to update member status');
+        }
+    } catch (e) {
+        console.error('Error toggling hide member:', e);
+    }
+}
+
+// ===== NOTE MANAGEMENT =====
+let selectedNoteEmoji = '📝';
+let myNoteExpiryInterval = null;
+
+async function loadMyNote() {
+    try {
+        const res = await apiFetch('/api/accounts/note/');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        
+        if (data.note) {
+            const note = data.note;
+            selectedNoteEmoji = note.emoji || '📝';
+            document.getElementById('noteEmojiBtn').textContent = selectedNoteEmoji;
+            document.getElementById('myNoteInput').value = note.content;
+            updateNoteCharCount(note.content.length);
+            document.getElementById('noteClearBtn').style.display = 'inline-flex';
+            
+            // Start countdown
+            startNoteExpiryCountdown(note.time_left_seconds);
+        } else {
+            // No active note
+            selectedNoteEmoji = '📝';
+            document.getElementById('noteEmojiBtn').textContent = '📝';
+            document.getElementById('myNoteInput').value = '';
+            updateNoteCharCount(0);
+            document.getElementById('noteClearBtn').style.display = 'none';
+            document.getElementById('myNoteExpiry').textContent = '';
+        }
+    } catch(e) { console.error('Failed to load note', e); }
+}
+
+function startNoteExpiryCountdown(seconds) {
+    if (myNoteExpiryInterval) clearInterval(myNoteExpiryInterval);
+    
+    let remaining = seconds;
+    function updateLabel() {
+        if (remaining <= 0) {
+            clearInterval(myNoteExpiryInterval);
+            document.getElementById('myNoteExpiry').textContent = 'Expired';
+            document.getElementById('noteClearBtn').style.display = 'none';
+            document.getElementById('myNoteInput').value = '';
+            updateNoteCharCount(0);
+            return;
+        }
+        const hrs = Math.floor(remaining / 3600);
+        const mins = Math.floor((remaining % 3600) / 60);
+        const secs = remaining % 60;
+        if (hrs > 0) {
+            document.getElementById('myNoteExpiry').textContent = `Expires in ${hrs}h ${mins}m`;
+        } else if (mins > 0) {
+            document.getElementById('myNoteExpiry').textContent = `Expires in ${mins}m ${secs}s`;
+        } else {
+            document.getElementById('myNoteExpiry').textContent = `Expires in ${secs}s`;
+        }
+        remaining--;
+    }
+    updateLabel();
+    myNoteExpiryInterval = setInterval(updateLabel, 1000);
+}
+
+function updateNoteCharCount(len) {
+    const el = document.getElementById('myNoteCharCount');
+    el.textContent = `${len} / 280`;
+    el.style.color = len > 250 ? '#f15c6d' : 'var(--wa-text-secondary)';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const textarea = document.getElementById('myNoteInput');
+    if (textarea) {
+        textarea.addEventListener('input', () => updateNoteCharCount(textarea.value.length));
+    }
+});
+
+async function saveMyNote() {
+    const content = document.getElementById('myNoteInput').value.trim();
+    if (!content) {
+        document.getElementById('myNoteInput').focus();
+        return;
+    }
+    
+    try {
+        const res = await apiFetch('/api/accounts/note/', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ content, emoji: selectedNoteEmoji })
+        });
+        if (!res || !res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Failed to save note');
+            return;
+        }
+        const data = await res.json();
+        const note = data.note;
+        document.getElementById('noteClearBtn').style.display = 'inline-flex';
+        startNoteExpiryCountdown(note.time_left_seconds);
+        
+        // Visual feedback
+        const btn = document.querySelector('.note-save-btn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Posted!';
+        btn.style.background = '#009975';
+        setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+    } catch(e) { console.error('Save note error', e); }
+}
+
+async function clearMyNote() {
+    if (!confirm('Delete your note?')) return;
+    try {
+        await apiFetch('/api/accounts/note/', { method: 'DELETE' });
+        if (myNoteExpiryInterval) clearInterval(myNoteExpiryInterval);
+        document.getElementById('myNoteInput').value = '';
+        document.getElementById('myNoteExpiry').textContent = '';
+        document.getElementById('noteClearBtn').style.display = 'none';
+        selectedNoteEmoji = '📝';
+        document.getElementById('noteEmojiBtn').textContent = '📝';
+        updateNoteCharCount(0);
+    } catch(e) { console.error('Clear note error', e); }
+}
+
+function toggleNoteEmojiPicker() {
+    const picker = document.getElementById('noteEmojiPicker');
+    picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
+}
+
+function pickNoteEmoji(emoji) {
+    selectedNoteEmoji = emoji;
+    document.getElementById('noteEmojiBtn').textContent = emoji;
+    document.getElementById('noteEmojiPicker').style.display = 'none';
+}
+
+// Close note emoji picker when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#noteEmojiBtn') && !e.target.closest('#noteEmojiPicker')) {
+        const picker = document.getElementById('noteEmojiPicker');
+        if (picker) picker.style.display = 'none';
+    }
+});
+
+// ===== STARRED MESSAGES =====
+async function starFromContextMenu() {
+    if (!contextMenuTarget || !contextMenuTarget.id) return;
+    document.getElementById('msgContextMenu').style.display = 'none';
+    
+    try {
+        const res = await apiFetch(`/api/chat/messages/${contextMenuTarget.id}/star/`, {
+            method: 'POST',
+            headers: authHeaders(),
+        });
+        if (res && res.ok) {
+            const data = await res.json();
+            // Show brief notification
+            showToast(data.starred ? '⭐ Message starred' : '☆ Message unstarred');
+        }
+    } catch (e) { console.error('Star message error:', e); }
+    contextMenuTarget = null;
+}
+
+async function openStarredMessages() {
+    if (!activeConversationId) return;
+    
+    document.getElementById('starredMessagesPanel').style.display = 'flex';
+    const list = document.getElementById('starredMessagesList');
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--wa-text-secondary);">Loading...</div>';
+    
+    try {
+        const res = await apiFetch(`/api/chat/messages/${activeConversationId}/starred/`);
+        if (res && res.ok) {
+            const starred = await res.json();
+            
+            if (starred.length === 0) {
+                list.innerHTML = `
+                    <div class="subpanel-empty">
+                        <span style="font-size: 48px; opacity: 0.5;">⭐</span>
+                        <p>No starred messages</p>
+                        <p style="font-size:13px;">Tap and hold on any message to star it.</p>
+                    </div>`;
+                return;
+            }
+            
+            list.innerHTML = '';
+            starred.forEach(msg => {
+                const item = document.createElement('div');
+                item.className = 'starred-msg-item';
+                
+                const isFile = msg.message_type !== 'text';
+                const content = isFile 
+                    ? `${getFileIcon(msg.message_type)} ${msg.file_name || msg.message_type}`
+                    : escapeHtml(msg.content || '');
+                
+                item.innerHTML = `
+                    <div class="starred-msg-sender">${escapeHtml(msg.sender)}</div>
+                    <div class="starred-msg-content">${content}</div>
+                    <div class="starred-msg-time">
+                        <span>${formatTime(msg.timestamp)}</span>
+                        <button class="unstar-btn" title="Unstar" onclick="event.stopPropagation(); unstarMessage(${msg.id}, this)">⭐</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+    } catch (e) { console.error('Load starred error:', e); }
+}
+
+async function unstarMessage(messageId, btnEl) {
+    try {
+        const res = await apiFetch(`/api/chat/messages/${messageId}/star/`, {
+            method: 'POST',
+            headers: authHeaders(),
+        });
+        if (res && res.ok) {
+            // Remove the item with animation
+            const item = btnEl.closest('.starred-msg-item');
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(50px)';
+            item.style.transition = 'all 0.3s ease';
+            setTimeout(() => {
+                item.remove();
+                // Check if list is now empty
+                const remaining = document.querySelectorAll('.starred-msg-item');
+                if (remaining.length === 0) {
+                    document.getElementById('starredMessagesList').innerHTML = `
+                        <div class="subpanel-empty">
+                            <span style="font-size: 48px; opacity: 0.5;">⭐</span>
+                            <p>No starred messages</p>
+                        </div>`;
+                }
+            }, 300);
+        }
+    } catch (e) { console.error('Unstar error:', e); }
+}
+
+function closeStarredMessages() {
+    document.getElementById('starredMessagesPanel').style.display = 'none';
+}
+
+// ===== MEDIA PANEL =====
+async function openMediaPanel(type) {
+    if (!activeConversationId) return;
+    
+    document.getElementById('mediaPanel').style.display = 'flex';
+    
+    // Set active tab
+    if (type) {
+        document.querySelectorAll('.media-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.textContent.toLowerCase().includes(type === 'all' ? 'all' : type));
+        });
+    }
+    
+    await loadMedia(type || 'all');
+}
+
+async function loadMedia(type) {
+    const list = document.getElementById('mediaList');
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--wa-text-secondary);">Loading...</div>';
+    
+    try {
+        const url = type === 'all' 
+            ? `/api/chat/conversations/${activeConversationId}/media/`
+            : `/api/chat/conversations/${activeConversationId}/media/?type=${type}`;
+        
+        const res = await apiFetch(url);
+        if (res && res.ok) {
+            const media = await res.json();
+            
+            if (media.length === 0) {
+                list.innerHTML = `
+                    <div class="subpanel-empty">
+                        <span style="font-size: 48px; opacity: 0.5;">🖼️</span>
+                        <p>No media found</p>
+                    </div>`;
+                return;
+            }
+            
+            // Separate images/videos from files/audio
+            const visual = media.filter(m => m.message_type === 'image' || m.message_type === 'video');
+            const files = media.filter(m => m.message_type === 'file' || m.message_type === 'audio');
+            
+            list.innerHTML = '';
+            
+            if (visual.length > 0 && (type === 'all' || type === 'image' || type === 'video')) {
+                const grid = document.createElement('div');
+                grid.className = 'media-grid';
+                
+                visual.forEach(m => {
+                    const item = document.createElement('div');
+                    item.className = 'media-grid-item';
+                    
+                    if (m.message_type === 'image') {
+                        item.innerHTML = `<img src="${m.file_url}" alt="" loading="lazy">`;
+                    } else {
+                        item.innerHTML = `
+                            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--wa-input-bg);font-size:32px;">🎬</div>
+                            <span class="media-type-badge">▶</span>
+                        `;
+                    }
+                    
+                    item.onclick = () => {
+                        if (m.message_type === 'image') {
+                            openPhotoViewer(m.file_url, m.sender);
+                        } else {
+                            window.open(m.file_url, '_blank');
+                        }
+                    };
+                    
+                    grid.appendChild(item);
+                });
+                
+                list.appendChild(grid);
+            }
+            
+            if (files.length > 0 && (type === 'all' || type === 'file' || type === 'audio')) {
+                files.forEach(m => {
+                    const item = document.createElement('div');
+                    item.className = 'media-file-item';
+                    item.onclick = () => window.open(m.file_url, '_blank');
+                    
+                    item.innerHTML = `
+                        <div class="media-file-icon">${getFileIcon(m.message_type)}</div>
+                        <div class="media-file-info">
+                            <div class="media-file-name">${escapeHtml(m.file_name || 'File')}</div>
+                            <div class="media-file-meta">${formatFileSize(m.file_size)} · ${formatTime(m.timestamp)}</div>
+                        </div>
+                    `;
+                    
+                    list.appendChild(item);
+                });
+            }
+        }
+    } catch (e) { console.error('Load media error:', e); }
+}
+
+function switchMediaTab(type, btn) {
+    document.querySelectorAll('.media-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    loadMedia(type);
+}
+
+function closeMediaPanel() {
+    document.getElementById('mediaPanel').style.display = 'none';
+}
+
+// ===== NOTIFICATION SETTINGS PANEL =====
+function openNotificationSettings() {
+    document.getElementById('notificationSettingsPanel').style.display = 'flex';
+    
+    const isMuted = activeConversation?.settings?.is_muted || false;
+    document.getElementById('muteToggle').checked = isMuted;
+    document.getElementById('muteStatusText').textContent = isMuted ? 'On' : 'Off';
+}
+
+async function toggleMuteFromSettings() {
+    const newVal = document.getElementById('muteToggle').checked;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/settings/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ is_muted: newVal })
+        });
+        if (res && res.ok) {
+            document.getElementById('muteStatusText').textContent = newVal ? 'On' : 'Off';
+            document.getElementById('notifSettingsSub').textContent = newVal ? 'Muted' : 'On';
+            
+            // Update local state
+            if (activeConversation.settings) {
+                activeConversation.settings.is_muted = newVal;
+            }
+            
+            showToast(newVal ? '🔕 Notifications muted' : '🔔 Notifications unmuted');
+            loadConversations();
+        }
+    } catch (e) { console.error('Toggle mute error:', e); }
+}
+
+function closeNotificationSettings() {
+    document.getElementById('notificationSettingsPanel').style.display = 'none';
+}
+
+// ===== ADVANCED PRIVACY TOGGLE =====
+async function toggleAdvancedPrivacy() {
+    if (!activeConversationId) return;
+    
+    const current = activeConversation?.settings?.advanced_privacy || false;
+    const newVal = !current;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/settings/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ advanced_privacy: newVal })
+        });
+        if (res && res.ok) {
+            document.getElementById('advancedPrivacySub').textContent = newVal ? 'On' : 'Off';
+            if (activeConversation.settings) {
+                activeConversation.settings.advanced_privacy = newVal;
+            }
+            showToast(newVal ? '🛡️ Advanced privacy enabled' : '🛡️ Advanced privacy disabled');
+        }
+    } catch (e) { console.error('Toggle privacy error:', e); }
+}
+
+// ===== FAVOURITES =====
+async function toggleFavourite() {
+    if (!activeConversationId) return;
+    
+    const current = activeConversation?.settings?.is_favourite || false;
+    const newVal = !current;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/settings/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ is_favourite: newVal })
+        });
+        if (res && res.ok) {
+            const icon = document.getElementById('favouriteIcon');
+            const text = document.getElementById('favouriteText');
+            
+            if (newVal) {
+                icon.textContent = '❤️';
+                text.textContent = 'Remove from favourites';
+                icon.classList.add('favourite-pulse');
+                setTimeout(() => icon.classList.remove('favourite-pulse'), 500);
+            } else {
+                icon.textContent = '♡';
+                text.textContent = 'Add to favourites';
+            }
+            
+            if (activeConversation.settings) {
+                activeConversation.settings.is_favourite = newVal;
+            }
+            
+            showToast(newVal ? '❤️ Added to favourites' : '♡ Removed from favourites');
+        }
+    } catch (e) { console.error('Toggle favourite error:', e); }
+}
+
+// ===== ADD TO LIST =====
+function showAddToList() {
+    showToast('📁 Lists feature coming soon!');
+}
+
+// ===== CLEAR CHAT =====
+async function clearChat() {
+    if (!activeConversationId) return;
+    
+    const confirmMsg = activeConversation?.is_group 
+        ? 'Clear all messages in this group? This action cannot be undone.'
+        : 'Clear all messages in this chat? This action cannot be undone.';
+    
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/clear/`, {
+            method: 'POST',
+            headers: authHeaders(),
+        });
+        if (res && res.ok) {
+            // Clear the messages area
+            document.getElementById('messagesArea').innerHTML = '';
+            showToast('🗑️ Chat cleared');
+            closeChatInfo();
+        }
+    } catch (e) { console.error('Clear chat error:', e); }
+}
+
+// ===== EXIT GROUP =====
+async function exitGroup() {
+    if (!activeConversation || !activeConversation.is_group) return;
+    
+    if (!confirm('Are you sure you want to exit this group?')) return;
+    
+    try {
+        const res = await apiFetch(`/api/chat/groups/${activeConversationId}/manage/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ action: 'remove_member', user_id: currentUser.id })
+        });
+        if (res && res.ok) {
+            showToast('👋 You left the group');
+            closeChatInfo();
+            document.getElementById('emptyChat').style.display = 'flex';
+            document.getElementById('activeChatView').style.display = 'none';
+            activeConversation = null;
+            activeConversationId = null;
+            await loadConversations();
+        }
+    } catch (e) { console.error('Exit group error:', e); }
+}
+
+// ===== REPORT CONTACT =====
+async function reportContact() {
+    if (!activeConversationId) return;
+    
+    const targetName = activeConversation?.is_group 
+        ? activeConversation.group_name 
+        : activeConversation.display_name;
+    
+    if (!confirm(`Report ${targetName}? This will be reviewed by the SwiftConnect team.`)) return;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/settings/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ is_reported: true })
+        });
+        if (res && res.ok) {
+            showToast('👎 Report submitted. Thank you.');
+        }
+    } catch (e) { console.error('Report error:', e); }
+}
+
+// ===== PROFILE PHOTO VIEWER =====
+function openPhotoViewer(imgSrc, title) {
+    const viewer = document.getElementById('photoViewer');
+    document.getElementById('photoViewerImg').src = imgSrc;
+    document.getElementById('photoViewerTitle').textContent = title || 'Profile photo';
+    viewer.style.display = 'flex';
+}
+
+function closePhotoViewer() {
+    document.getElementById('photoViewer').style.display = 'none';
+}
+
+async function handleContactPhotoView(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (activeConversation && activeConversation.is_group) {
+        if (activeConversation.created_by !== currentUser.id) {
+            showToast('Only group admins can change the group photo.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('action', 'update_icon');
+        formData.append('group_icon', file);
+
+        try {
+            const res = await apiFetch(`/api/chat/groups/${activeConversationId}/manage/`, {
+                method: 'PUT',
+                body: formData
+            });
+
+            if (res && res.ok) {
+                const data = await res.json();
+                document.getElementById('chatInfoAvatar').innerHTML = `<img src="${data.group_icon_url}" alt="">`;
+                activeConversation.display_avatar = data.group_icon_url;
+                
+                // Update conversation list item
+                const convEl = document.querySelector(`.conv-item[data-id="${activeConversationId}"] .conv-avatar`);
+                if (convEl) convEl.innerHTML = `<img src="${data.group_icon_url}">`;
+                
+                showToast('📷 Group photo updated');
+            } else {
+                showToast('Failed to update group photo');
+            }
+        } catch (e) {
+            console.error('Group photo update error:', e);
+            showToast('Error updating photo');
+        }
+    } else {
+        // Individual contact: just preview the photo
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            openPhotoViewer(e.target.result, document.getElementById('chatInfoName').textContent);
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // Reset input
+    event.target.value = '';
+}
+
+// ===== TOAST NOTIFICATION =====
+function showToast(message) {
+    // Remove existing toast
+    const existing = document.querySelector('.swift-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.className = 'swift-toast';
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: var(--wa-panel-header);
+        color: var(--wa-text);
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        border: 1px solid var(--wa-border);
+        z-index: 5000;
+        animation: toastIn 0.3s ease forwards;
+        pointer-events: none;
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'toastOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 2500);
+}
+
+// Add toast animations
+if (!document.getElementById('toastAnimStyles')) {
+    const style = document.createElement('style');
+    style.id = 'toastAnimStyles';
+    style.textContent = `
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(-50%) translateY(0); }
+            to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// ===== STUDY MODE =====
+async function toggleStudyMode() {
+    if (!currentUser) return;
+    
+    const currentVal = currentUser.study_mode_active === true || String(currentUser.study_mode_active).toLowerCase() === 'true';
+    const newVal = !currentVal;
+    
+    if (newVal) {
+        const confirmMsg = "Are you sure you want to activate Study Mode?\n\nThis will lock and hide all your chats to help you focus. Only chats you've explicitly allowed (and SwiftConnect AI) will remain visible.";
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+    }
+    
+    try {
+        const res = await apiFetch(`/api/accounts/profile/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ study_mode_active: newVal })
+        });
+        if (res && res.ok) {
+            currentUser.study_mode_active = newVal;
+            showToast(newVal ? '📚 Study Mode Enabled' : '📚 Study Mode Disabled');
+            renderConversations();
+        }
+    } catch (e) {
+        console.error('Study mode error:', e);
+    }
+}
+
+async function toggleStudyAllowed() {
+    if (!activeConversationId) return;
+    
+    const current = activeConversation?.settings?.is_study_allowed || false;
+    const newVal = !current;
+    
+    try {
+        const res = await apiFetch(`/api/chat/conversations/${activeConversationId}/settings/`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ is_study_allowed: newVal })
+        });
+        if (res && res.ok) {
+            document.getElementById('studyAllowedSub').textContent = newVal ? 'On' : 'Off';
+            if (!activeConversation.settings) {
+                activeConversation.settings = {};
+            }
+            activeConversation.settings.is_study_allowed = newVal;
+            showToast(newVal ? '📚 Chat allowed in Study Mode' : 'Chat hidden in Study Mode');
+            renderConversations(); // update list in background
+        }
+    } catch (e) { console.error('Toggle study allowed error:', e); }
+}
