@@ -83,6 +83,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 )
 
     async def chat_message(self, event):
+        is_hidden = await self.check_if_hidden()
+        if is_hidden and event['message']['sender'] != self.user.id:
+            return  # Hidden participants don't receive the WebSocket message
+            
         await self.send(text_data=json.dumps({
             'type': 'message',
             'message': event['message'],
@@ -113,6 +117,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ).exists()
 
     @database_sync_to_async
+    def check_if_hidden(self):
+        from chat.models import Conversation
+        return Conversation.objects.filter(
+            id=self.conversation_id, hidden_participants=self.user
+        ).exists()
+
+    @database_sync_to_async
     def save_message(self, content, reply_to_id=None):
         from chat.models import Conversation, Message, MessageStatus
         try:
@@ -124,9 +135,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 message_type='text',
                 reply_to_id=reply_to_id,
             )
-            # Create status for all other participants
+            # Create status for all other non-hidden participants
+            hidden_ids = list(conv.hidden_participants.values_list('id', flat=True))
             for p in conv.participants.exclude(id=self.user.id):
-                MessageStatus.objects.create(message=msg, user=p, status='sent')
+                if p.id not in hidden_ids:
+                    MessageStatus.objects.create(message=msg, user=p, status='sent')
+
+            # Build reply_to_message object if applicable
+            reply_to_message = None
+            if reply_to_id:
+                try:
+                    reply_msg = Message.objects.get(id=reply_to_id)
+                    reply_to_message = {
+                        'id': reply_msg.id,
+                        'sender': reply_msg.sender.id,
+                        'sender_name': reply_msg.sender.username,
+                        'content': reply_msg.content,
+                        'message_type': reply_msg.message_type,
+                    }
+                except Message.DoesNotExist:
+                    pass
 
             return {
                 'id': msg.id,
@@ -136,7 +164,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message_type': 'text',
                 'timestamp': msg.timestamp.isoformat(),
                 'reply_to': reply_to_id,
-                'status': 'sent',
+                'reply_to_message': reply_to_message,
+                'overall_status': 'sent',
+                'is_deleted': False,
             }
         except Exception:
             return None

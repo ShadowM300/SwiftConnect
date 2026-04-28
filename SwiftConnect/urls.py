@@ -12,6 +12,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path('api/chat/', include('chat.urls')),
+    path('api/bot/', include('chatbot.urls')),
 
     # Frontend pages
     path('', TemplateView.as_view(template_name='login.html'), name='login'),

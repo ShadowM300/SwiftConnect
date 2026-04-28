@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'accounts',
     'chat',
     'calls',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
@@ -152,3 +153,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 import mimetypes
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("text/javascript", ".js", True)
+mimetypes.add_type("audio/webm", ".webm", True)
+mimetypes.add_type("audio/ogg", ".ogg", True)
+mimetypes.add_type("audio/mp4", ".m4a", True)
+mimetypes.add_type("audio/mpeg", ".mp3", True)
+mimetypes.add_type("audio/wav", ".wav", True)

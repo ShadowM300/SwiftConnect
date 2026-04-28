@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile
+from .models import UserProfile, UserNote
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     first_name = serializers.CharField(source='user.first_name', read_only=True)
@@ -12,7 +13,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                  'phone_number', 'avatar', 'about', 'chat_lock_pin', 'is_online', 'last_seen']
+                  'phone_number', 'avatar', 'about', 'chat_lock_pin', 'is_online', 'study_mode_active', 'last_seen']
         read_only_fields = ['is_online', 'last_seen']
 
 
@@ -55,8 +56,34 @@ class UserSearchSerializer(serializers.ModelSerializer):
     avatar = serializers.ImageField(source='profile.avatar', read_only=True)
     about = serializers.CharField(source='profile.about', read_only=True)
     is_online = serializers.BooleanField(source='profile.is_online', read_only=True)
+    active_note = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name',
-                  'phone_number', 'avatar', 'about', 'is_online']
+                  'phone_number', 'avatar', 'about', 'is_online', 'active_note']
+
+    def get_active_note(self, obj):
+        try:
+            note = obj.note
+            if note.is_active and note.content:
+                return {
+                    'content': note.content,
+                    'emoji': note.emoji,
+                    'time_left_seconds': note.time_left_seconds,
+                    'created_at': note.created_at.isoformat(),
+                }
+        except UserNote.DoesNotExist:
+            pass
+        return None
+
+
+class NoteSerializer(serializers.ModelSerializer):
+    """Serializer for the current user's note."""
+    is_active = serializers.BooleanField(read_only=True)
+    time_left_seconds = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = UserNote
+        fields = ['id', 'content', 'emoji', 'created_at', 'expires_at', 'is_active', 'time_left_seconds']
+        read_only_fields = ['id', 'created_at', 'expires_at', 'is_active', 'time_left_seconds']

@@ -9,4 +9,5 @@ urlpatterns = [
     path('profile/', views.ProfileView.as_view(), name='profile'),
     path('search/', views.UserSearchView.as_view(), name='user_search'),
     path('user/<int:user_id>/', views.UserDetailView.as_view(), name='user_detail'),
+    path('note/', views.NoteView.as_view(), name='user_note'),
 ]

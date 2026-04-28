@@ -32,15 +32,22 @@ class CallSignalingConsumer(AsyncWebsocketConsumer):
 
         if signal_type == 'call_offer':
             call_log = await self.create_call_log(target_user_id, data.get('call_type', 'voice'))
+            caller_name = await self.get_user_display_name(self.user)
+            # Send offer to target
             await self.channel_layer.group_send(target_channel, {
                 'type': 'call_signal',
                 'signal_type': 'call_offer',
                 'caller_id': self.user.id,
-                'caller_name': self.user.username,
+                'caller_name': caller_name,
                 'call_type': data.get('call_type', 'voice'),
                 'sdp': data.get('sdp'),
                 'call_id': call_log,
             })
+            # Echo call_id back to caller so they can properly end/reject
+            await self.send(text_data=json.dumps({
+                'signal_type': 'call_initiated',
+                'call_id': call_log,
+            }))
 
         elif signal_type == 'call_answer':
             await self.update_call_status(data.get('call_id'), 'answered')
@@ -100,3 +107,9 @@ class CallSignalingConsumer(AsyncWebsocketConsumer):
                 status=status,
                 ended_at=timezone.now() if status in ['ended', 'rejected', 'missed'] else None
             )
+
+    @database_sync_to_async
+    def get_user_display_name(self, user):
+        """Return full name if available, otherwise username."""
+        name = f"{user.first_name} {user.last_name}".strip()
+        return name if name else user.username

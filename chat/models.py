@@ -8,6 +8,7 @@ class Conversation(models.Model):
     group_name = models.CharField(max_length=100, blank=True, null=True)
     group_icon = models.ImageField(upload_to='group_icons/', blank=True, null=True)
     participants = models.ManyToManyField(User, related_name='conversations')
+    hidden_participants = models.ManyToManyField(User, related_name='hidden_in_conversations', blank=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_conversations')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -86,19 +87,38 @@ class MessageStatus(models.Model):
 
 
 class ConversationSetting(models.Model):
-    """Per-user settings for a conversation (mute, block, archive, lock)."""
+    """Per-user settings for a conversation (mute, block, archive, lock, favourite, report)."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_settings')
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='settings')
     is_muted = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_locked = models.BooleanField(default=False)
     is_blocked = models.BooleanField(default=False)
+    is_favourite = models.BooleanField(default=False)
+    is_reported = models.BooleanField(default=False)
+    advanced_privacy = models.BooleanField(default=False)
+    is_study_allowed = models.BooleanField(default=False)
+    cleared_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         unique_together = ('user', 'conversation')
 
     def __str__(self):
         return f"{self.user.username} settings for {self.conversation.id}"
+
+
+class StarredMessage(models.Model):
+    """A message starred/bookmarked by a user."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='starred_messages')
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='starred_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'message')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} starred message {self.message.id}"
 
 
 class Status(models.Model):
